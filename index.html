@@ -222,7 +222,7 @@
 
   .sets-header {
     display: grid;
-    grid-template-columns: 28px 1fr 72px 72px 36px;
+    grid-template-columns: 28px 1fr 72px 72px 36px 28px;
     gap: 6px;
     padding: 0 4px 8px;
     border-bottom: 1px solid var(--border);
@@ -242,27 +242,22 @@
 
   .set-row {
     display: grid;
-    grid-template-columns: 28px 1fr 72px 72px 36px;
+    grid-template-columns: 28px 1fr 72px 72px 36px 28px;
     gap: 6px;
     align-items: center;
     padding: 5px 4px;
     border-radius: 6px;
-    transition: all 0.3s ease;
+    transition: background 0.25s ease;
     animation: slideIn 0.25s ease;
+  }
+
+  .set-row.done-row {
+    background: rgba(46,213,115,0.08);
   }
 
   @keyframes slideIn {
     from { opacity: 0; transform: translateX(-8px); }
     to   { opacity: 1; transform: translateX(0); }
-  }
-
-  @keyframes slideOut {
-    from { opacity: 1; transform: translateX(0) scaleY(1); max-height: 40px; }
-    to   { opacity: 0; transform: translateX(8px) scaleY(0); max-height: 0; }
-  }
-
-  .set-row.completing {
-    animation: slideOut 0.35s ease forwards;
   }
 
   .set-label {
@@ -328,12 +323,47 @@
   }
 
   .set-check.checked {
-    background: var(--accent);
-    border-color: var(--accent);
+    background: var(--green);
+    border-color: var(--green);
   }
 
   .set-check.checked svg {
     stroke: #0a0a0a;
+  }
+
+  .set-row.done-row .set-input {
+    border-color: rgba(46,213,115,0.3);
+    color: var(--green);
+    background: rgba(46,213,115,0.05);
+  }
+
+  .set-row.done-row .set-label,
+  .set-row.done-row .set-name {
+    color: var(--green);
+    opacity: 0.8;
+  }
+
+  .del-btn {
+    width: 24px;
+    height: 24px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: none;
+    color: var(--text-muted);
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+  }
+
+  .del-btn:active {
+    background: rgba(255,71,87,0.15);
+    border-color: var(--red);
+    color: var(--red);
   }
 
   /* ── ADD SET BUTTON ── */
@@ -845,11 +875,11 @@ function renderWorkout() {
   let totalSets = 0, doneSets = 0;
 
   workoutState.forEach((ex, exIdx) => {
-    const activeSets = ex.sets.filter(s => !s.done);
+    const doneSetsCount = ex.sets.filter(s => s.done).length;
     totalSets += ex.sets.length;
     doneSets  += ex.sets.filter(s => s.done).length;
 
-    const allDone = activeSets.length === 0;
+    const allDone = doneSetsCount === ex.sets.length && ex.sets.length > 0;
 
     const card = document.createElement('div');
     card.className = `exercise-card${allDone ? ' all-done' : ''}${ex.collapsed ? ' collapsed' : ''}`;
@@ -866,7 +896,7 @@ function renderWorkout() {
           ${ex.name}
           ${ex.superset ? `<span class="superset-badge">SS-${ex.superset}</span>` : ''}
         </div>
-        <div class="ex-meta">${ex.sets.length} set toplam · ${allDone ? 'Tamamlandı' : activeSets.length + ' set kaldı'}</div>
+        <div class="ex-meta">${ex.sets.length} set · ${doneSetsCount}/${ex.sets.length} tamamlandı</div>
       </div>
       <div class="ex-done-badge">✓ Bitti</div>
       <div class="ex-toggle">▾</div>
@@ -877,18 +907,16 @@ function renderWorkout() {
     const setsWrap = document.createElement('div');
     setsWrap.className = 'sets-container';
 
-    if (activeSets.length > 0 || !allDone) {
+    if (ex.sets.length > 0) {
       const setsHdr = document.createElement('div');
       setsHdr.className = 'sets-header';
-      setsHdr.innerHTML = `<span>#</span><span>Set</span><span>Tekrar</span><span>KG</span><span>✓</span>`;
+      setsHdr.innerHTML = `<span>#</span><span>Set</span><span>Tekrar</span><span>KG</span><span>✓</span><span></span>`;
       setsWrap.appendChild(setsHdr);
     }
 
     ex.sets.forEach((set, setIdx) => {
-      if (set.done) return; // done sets are hidden
-
       const row = document.createElement('div');
-      row.className = 'set-row';
+      row.className = `set-row${set.done ? ' done-row' : ''}`;
       row.id = `set-row-${exIdx}-${setIdx}`;
 
       row.innerHTML = `
@@ -907,6 +935,7 @@ function renderWorkout() {
             <polyline points="2,7 5.5,10.5 12,3"/>
           </svg>
         </button>
+        <button class="del-btn" onclick="deleteSet(${exIdx},${setIdx})" aria-label="Seti sil">×</button>
       `;
       setsWrap.appendChild(row);
     });
@@ -946,19 +975,20 @@ function updateSet(exIdx, setIdx, field, value) {
 }
 
 function toggleSet(exIdx, setIdx) {
-  const row = document.getElementById(`set-row-${exIdx}-${setIdx}`);
-  if (row) {
-    row.classList.add('completing');
-    setTimeout(() => {
-      workoutState[exIdx].sets[setIdx].done = true;
-      saveSession();
-      renderWorkout();
-      updateProgress();
+  workoutState[exIdx].sets[setIdx].done = !workoutState[exIdx].sets[setIdx].done;
+  saveSession();
+  renderWorkout();
+  updateProgress();
 
-      const allDone = workoutState[exIdx].sets.every(s => s.done);
-      if (allDone) showToast(`💪 ${workoutState[exIdx].name} tamamlandı!`);
-    }, 350);
-  }
+  const allDone = workoutState[exIdx].sets.every(s => s.done);
+  if (allDone) showToast(`💪 ${workoutState[exIdx].name} tamamlandı!`);
+}
+
+function deleteSet(exIdx, setIdx) {
+  workoutState[exIdx].sets.splice(setIdx, 1);
+  saveSession();
+  renderWorkout();
+  updateProgress();
 }
 
 function addSet(exIdx) {
