@@ -730,12 +730,14 @@ const DEFAULT_PROGRAM = [
       { reps: 12, kg: 59 },
       { reps: 12, kg: 59 },
       { reps: 12, kg: 59 },
+      { reps: 12, kg: 59 },
     ]
   },
   {
     name: "Vertical Row",
     superset: null,
     defaultSets: [
+      { reps: 12, kg: 39 },
       { reps: 12, kg: 39 },
       { reps: 12, kg: 39 },
       { reps: 12, kg: 39 },
@@ -748,12 +750,14 @@ const DEFAULT_PROGRAM = [
       { reps: 12, kg: 59 },
       { reps: 12, kg: 59 },
       { reps: 12, kg: 59 },
+      { reps: 12, kg: 59 },
     ]
   },
   {
     name: "Lat Pulldown",
     superset: null,
     defaultSets: [
+      { reps: 12, kg: 39 },
       { reps: 12, kg: 39 },
       { reps: 12, kg: 39 },
       { reps: 12, kg: 39 },
@@ -766,12 +770,14 @@ const DEFAULT_PROGRAM = [
       { reps: 12, kg: 59 },
       { reps: 12, kg: 59 },
       { reps: 12, kg: 59 },
+      { reps: 12, kg: 59 },
     ]
   },
   {
     name: "Rear Delt Fly",
     superset: null,
     defaultSets: [
+      { reps: 12, kg: 25 },
       { reps: 12, kg: 25 },
       { reps: 12, kg: 25 },
       { reps: 12, kg: 25 },
@@ -784,12 +790,14 @@ const DEFAULT_PROGRAM = [
       { reps: 12, kg: 39 },
       { reps: 12, kg: 39 },
       { reps: 12, kg: 39 },
+      { reps: 12, kg: 39 },
     ]
   },
   {
     name: "Pec Deck",
     superset: null,
     defaultSets: [
+      { reps: 12, kg: 39 },
       { reps: 12, kg: 39 },
       { reps: 12, kg: 39 },
       { reps: 12, kg: 39 },
@@ -802,12 +810,14 @@ const DEFAULT_PROGRAM = [
       { reps: 12, kg: 39 },
       { reps: 12, kg: 39 },
       { reps: 12, kg: 39 },
+      { reps: 12, kg: 39 },
     ]
   },
   {
     name: "Row Machine",
     superset: null,
     defaultSets: [
+      { reps: 12, kg: 35 },
       { reps: 12, kg: 35 },
       { reps: 12, kg: 35 },
       { reps: 12, kg: 35 },
@@ -820,6 +830,7 @@ const DEFAULT_PROGRAM = [
 // ─────────────────────────────────────────────
 let workoutState = []; // live session
 let history = [];      // saved sessions
+let workoutStartTime = null; // set on first completed set
 
 function loadState() {
   try {
@@ -829,6 +840,9 @@ function loadState() {
 
     const savedHistory = localStorage.getItem('gymlog_history');
     if (savedHistory) history = JSON.parse(savedHistory);
+
+    const savedStart = localStorage.getItem('gymlog_start');
+    if (savedStart) workoutStartTime = savedStart;
   } catch(e) {
     initWorkout();
   }
@@ -907,7 +921,14 @@ function renderWorkout() {
       setsWrap.appendChild(setsHdr);
     }
 
-    ex.sets.forEach((set, setIdx) => {
+    // Done setler üstte, bekleyenler altta
+    const sortedSets = [
+      ...ex.sets.map((s, i) => ({ ...s, origIdx: i })).filter(s => s.done),
+      ...ex.sets.map((s, i) => ({ ...s, origIdx: i })).filter(s => !s.done),
+    ];
+
+    sortedSets.forEach((set) => {
+      const setIdx = set.origIdx;
       const row = document.createElement('div');
       row.className = `set-row${set.done ? ' done-row' : ''}`;
       row.id = `set-row-${exIdx}-${setIdx}`;
@@ -968,7 +989,14 @@ function updateSet(exIdx, setIdx, field, value) {
 }
 
 function toggleSet(exIdx, setIdx) {
+  const isFirstEver = !workoutStartTime && !workoutState.some(ex => ex.sets.some(s => s.done));
   workoutState[exIdx].sets[setIdx].done = !workoutState[exIdx].sets[setIdx].done;
+
+  if (isFirstEver && workoutState[exIdx].sets[setIdx].done) {
+    workoutStartTime = new Date().toISOString();
+    localStorage.setItem('gymlog_start', workoutStartTime);
+  }
+
   saveSession();
   renderWorkout();
   updateProgress();
@@ -1022,11 +1050,14 @@ function finishWorkout() {
   closeFinishModal();
 
   const now = new Date();
+  const startLabel = workoutStartTime ? formatTime(new Date(workoutStartTime)) : null;
+
   const session = {
     id: Date.now(),
     timestamp: now.toISOString(),
     dateLabel: formatDate(now),
     timeLabel: formatTime(now),
+    startLabel: startLabel,
     exercises: workoutState
       .filter(ex => ex.sets.some(s => s.done))
       .map(ex => ({
@@ -1040,6 +1071,8 @@ function finishWorkout() {
   saveHistory();
 
   // Reset
+  workoutStartTime = null;
+  localStorage.removeItem('gymlog_start');
   initWorkout();
   renderWorkout();
 
@@ -1078,7 +1111,7 @@ function renderHistory() {
       <div class="history-card-header" onclick="toggleHistoryCard(${sIdx})">
         <div>
           <div class="history-date">${session.dateLabel}</div>
-          <div class="history-time">${session.timeLabel} · ${session.exercises.length} egzersiz</div>
+          <div class="history-time">${session.startLabel ? session.startLabel + ' → ' : ''}${session.timeLabel} · ${session.exercises.length} egzersiz</div>
         </div>
         <div class="history-stats">
           <div class="stat-chip">${totalSets} set</div>
